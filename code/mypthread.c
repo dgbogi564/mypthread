@@ -7,19 +7,27 @@
 #include "mypthread.h"
 
 // INITIALIZE ALL YOUR VARIABLES HERE
+struct threadControlBlock *tcb;   /* Thread control block */
+int id = -1;
+
 // YOUR CODE HERE
 
 
 /* create a new thread */
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
                       void *(*function)(void*), void * arg) {
-       // create Thread Control Block
-       // create and initialize the context of this thread
-       // allocate space of stack for this thread to run
-       // after everything is all set, push this thread int
-       // YOUR CODE HERE
-
-    return 0;
+   // create Thread Control Block
+   // create and initialize the context of this thread
+   // allocate space of stack for this thread to run
+   // after everything is all set, push this thread int
+   // YOUR CODE HERE
+   tcb = malloc(sizeof(threadControlBlock));
+   makecontext(tcb->ucp, (void (*)(void)) function, 1, arg);
+   tcb->ucp->uc_stack = *(stack_t*) calloc(sizeof(stack_t), 1);
+   tcb->id = id++;
+   tcb->state = READY;
+   tcb->priority = 0;
+   return 0;
 };
 
 /* give CPU possession to other user-level threads voluntarily */
@@ -27,7 +35,7 @@ int mypthread_yield() {
 
 	// change thread state from Running to Ready
 	// save context of this thread to its thread control block
-	// wwitch from thread context to scheduler context
+	// switch from thread context to scheduler context
 
 	// YOUR CODE HERE
 	return 0;

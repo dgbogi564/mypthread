@@ -18,8 +18,18 @@
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ucontext.h>
 
 typedef uint mypthread_t;
+
+enum mypthread_state {
+    RUNNING,
+    READY,
+    BLOCKED,
+    JOIN,
+    DEAD,
+    MUTEX_WAIT
+};
 
 typedef struct threadControlBlock {
 	/* add important states in a thread control block */
@@ -31,12 +41,15 @@ typedef struct threadControlBlock {
 	// And more ...
 
 	// YOUR CODE HERE
-} tcb;
+    ucontext_t *ucp;                /* Thread context */
+    int id;                         /* Thread id */
+    int priority;                   /* Priority number — the lower the number, the higher the priority */
+    enum mypthread_state state;     /* State of the thread */
+} threadControlBlock;
 
 /* mutex struct definition */
 typedef struct mypthread_mutex_t {
 	/* add something here */
-
 	// YOUR CODE HERE
 } mypthread_mutex_t;
 
@@ -45,14 +58,13 @@ typedef struct mypthread_mutex_t {
 
 // YOUR CODE HERE
 
-
 /* Function Declarations: */
 
 /* create a new thread */
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr, void
     *(*function)(void*), void * arg);
 
-/* give CPU pocession to other user level threads voluntarily */
+/* give CPU possession to other user level threads voluntarily */
 int mypthread_yield();
 
 /* terminate a thread */
@@ -65,7 +77,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr);
 int mypthread_mutex_init(mypthread_mutex_t *mutex, const pthread_mutexattr_t
     *mutexattr);
 
-/* aquire the mutex lock */
+/* acquire the mutex lock */
 int mypthread_mutex_lock(mypthread_mutex_t *mutex);
 
 /* release the mutex lock */
