@@ -1,8 +1,8 @@
 // File:	mypthread.c
 
-// List all group member's name:
-// username of iLab:
-// iLab Server:
+// List all group member's name: David Gbogi,
+// username of iLab: dog12,
+// iLab Server: ilab.cs.rutgers.edu
 
 #include "mypthread.h"
 
