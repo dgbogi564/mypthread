@@ -22,14 +22,10 @@
 
 typedef uint mypthread_t;
 
-enum mypthread_state {
-    RUNNING,
-    READY,
-    BLOCKED,
-    JOIN,
-    DEAD,
-    MUTEX_WAIT
-};
+
+typedef enum mypthread_state {
+    RUNNING, READY, BLOCKED, JOIN, DEAD, MUTEX_WAIT
+} mypthread_state;
 
 typedef struct threadControlBlock {
 	/* add important states in a thread control block */
@@ -41,10 +37,10 @@ typedef struct threadControlBlock {
 	// And more ...
 
 	// YOUR CODE HERE
-    ucontext_t *ucp;                /* Thread context */
-    int id;                         /* Thread id */
-    int priority;                   /* Priority number — the lower the number, the higher the priority */
-    enum mypthread_state state;     /* State of the thread */
+    ucontext_t *ucp;                /* thread context */
+    int id;                         /* thread id */
+    int priority;                   /* priority number — the lower the number, the higher the priority */
+    mypthread_state state;          /* state of the thread */
 } threadControlBlock;
 
 /* mutex struct definition */
@@ -57,6 +53,16 @@ typedef struct mypthread_mutex_t {
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
 // YOUR CODE HERE
+typedef struct node_ {
+    struct node_ *next;
+    struct node_ *prev;
+} node_;
+
+typedef struct queue_ {
+    unsigned int size;
+    node_ *head;
+    node_ *rear;
+} queue_;
 
 /* Function Declarations: */
 
@@ -97,5 +103,24 @@ int mypthread_mutex_destroy(mypthread_mutex_t *mutex);
 #define pthread_mutex_unlock mypthread_mutex_unlock
 #define pthread_mutex_destroy mypthread_mutex_destroy
 #endif
+
+
+/* create node */
+struct node_ *node_create();
+
+/* destroy node */
+void *node_destroy(node_ *node);
+
+/* create queue */
+struct queue_ *queue_create();
+
+/* pop head of queue */
+struct node_* pop_head(queue_ *q);
+
+/* pop rear of queue */
+struct node_* pop_rear(queue_ *q);
+
+/* destroy queue */
+void *queue_destroy(queue_ *q);
 
 #endif

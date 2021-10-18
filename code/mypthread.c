@@ -7,10 +7,11 @@
 #include "mypthread.h"
 
 // INITIALIZE ALL YOUR VARIABLES HERE
-struct threadControlBlock *tcb;   /* Thread control block */
-int id = -1;
-
 // YOUR CODE HERE
+#define STACK_SIZE 256
+
+struct threadControlBlock *tcb;   /* thread control block */
+int id_counter = 0;               /* counter for assigning threads their individual IDs */
 
 
 /* create a new thread */
@@ -22,11 +23,15 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
    // after everything is all set, push this thread int
    // YOUR CODE HERE
    tcb = malloc(sizeof(threadControlBlock));
+   tcb->ucp->uc_stack.ss_sp = calloc(sizeof(stack_t), STACK_SIZE);
+   tcb->ucp->uc_stack.ss_size = STACK_SIZE;
+   tcb->ucp->uc_link = NULL;
    makecontext(tcb->ucp, (void (*)(void)) function, 1, arg);
-   tcb->ucp->uc_stack = *(stack_t*) calloc(sizeof(stack_t), 1);
-   tcb->id = id++;
+
+   tcb->id = id_counter++;
    tcb->state = READY;
    tcb->priority = 0;
+
    return 0;
 };
 
@@ -38,7 +43,7 @@ int mypthread_yield() {
 	// switch from thread context to scheduler context
 
 	// YOUR CODE HERE
-	return 0;
+    tcb->state = RUNNING;
 };
 
 /* terminate a thread */
@@ -141,3 +146,49 @@ static void sched_mlfq() {
 // Feel free to add any other functions you need
 
 // YOUR CODE HERE
+/* create node */
+struct node_ *node_create() {
+    node_ *node = malloc(sizeof(node_));
+    if(node == NULL) {
+        perror("node_create(): failed to allocate node.");
+    }
+    return node;
+}
+
+/* destroy node */
+void *node_destroy(node_ *node) {
+    free(node);
+}
+
+/* create queue */
+struct queue_ *queue_create() {
+    queue_ *q = malloc(sizeof(queue_));
+    if(q == NULL) {
+        perror("queue_create(): failed to allocate node.");
+    }
+    return q;
+}
+
+/* pop head of queue */
+struct node_* pop_head(queue_ *q) {
+    node_ *node = q->head;
+    q->head = node->next;
+    q->head->prev = NULL;
+    return node;
+}
+
+/* pop rear of queue */
+struct node_* pop_rear(queue_ *q) {
+    node_ *node = q->rear;
+    q->rear = node->prev;
+    q->rear->next = NULL;
+    return node;
+}
+
+/* destroy queue */
+void *queue_destroy(queue_ *q) {
+    while(q->size > 0) {
+        free(pop_head(q));
+    }
+    free(q);
+}
