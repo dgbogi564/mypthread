@@ -37,7 +37,7 @@ typedef struct threadControlBlock {
 	// And more ...
 
 	// YOUR CODE HERE
-    ucontext_t *ucp;                /* thread context */
+    ucontext_t ucp;                 /* thread context */
     int id;                         /* thread id */
     int priority;                   /* priority number — the lower the number, the higher the priority */
     mypthread_state state;          /* state of the thread */
@@ -54,6 +54,8 @@ typedef struct mypthread_mutex_t {
 
 // YOUR CODE HERE
 typedef struct node_ {
+    int id;
+    void *value_ptr;
     struct node_ *next;
     struct node_ *prev;
 } node_;
@@ -105,14 +107,31 @@ int mypthread_mutex_destroy(mypthread_mutex_t *mutex);
 #endif
 
 
+/* scheduler */
+static void schedule();
+
+/* Preemptive SJF (STCF) scheduling algorithm */
+static void sched_stcf();
+
+/* Preemptive MLFQ scheduling algorithm */
+static void sched_mlfq();
+
+
+// YOUR CODE HERE
 /* create node */
-struct node_ *node_create();
+struct node_ *node_create(int id, void *value_ptr);
 
 /* destroy node */
 void *node_destroy(node_ *node);
 
 /* create queue */
 struct queue_ *queue_create();
+
+/* add node to front of queue */
+void enqueue_head(queue_ *q, node_ *node);
+
+/* add node to back of queue */
+void enqueue_rear(queue_ *q, node_ *node);
 
 /* pop head of queue */
 struct node_* pop_head(queue_ *q);
@@ -122,5 +141,6 @@ struct node_* pop_rear(queue_ *q);
 
 /* destroy queue */
 void *queue_destroy(queue_ *q);
+
 
 #endif

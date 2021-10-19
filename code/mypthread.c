@@ -8,10 +8,13 @@
 
 // INITIALIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
-#define STACK_SIZE 256
+#define STACKSIZE 4096
 
 struct threadControlBlock *tcb;   /* thread control block */
-int id_counter = 0;               /* counter for assigning threads their individual IDs */
+volatile int id_counter = 0;      /* counter for assigning threads their individual IDs */
+ucontext_t sched_ucp;             /* scheduler context */
+int sucp_init = 0;                /* variable to check if sched_ucp is initialized */
+queue_ join_queue;                /* thread join queue */
 
 
 /* create a new thread */
@@ -21,12 +24,23 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
    // create and initialize the context of this thread
    // allocate space of stack for this thread to run
    // after everything is all set, push this thread int
+
    // YOUR CODE HERE
-   tcb = malloc(sizeof(threadControlBlock));
-   tcb->ucp->uc_stack.ss_sp = calloc(sizeof(stack_t), STACK_SIZE);
-   tcb->ucp->uc_stack.ss_size = STACK_SIZE;
-   tcb->ucp->uc_link = NULL;
-   makecontext(tcb->ucp, (void (*)(void)) function, 1, arg);
+
+   getcontext(&tcb->ucp);
+   tcb->ucp.uc_stack.ss_sp = malloc(STACKSIZE);
+   tcb->ucp.uc_stack.ss_size = STACKSIZE;
+   tcb->ucp.uc_flags = 0;
+   makecontext(&tcb->ucp, (void (*)(void)) function, 2, arg);
+
+    if(sucp_init == 0) {
+        getcontext(&sched_ucp);
+        sched_ucp.uc_stack.ss_sp = malloc(STACKSIZE);
+        sched_ucp.uc_stack.ss_size = STACKSIZE;
+        sched_ucp.uc_stack.ss_flags = 0;
+        makecontext(&sched_ucp, schedule, 1);
+        sucp_init = 1;
+    }
 
    tcb->id = id_counter++;
    tcb->state = READY;
@@ -36,6 +50,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
 };
 
 /* give CPU possession to other user-level threads voluntarily */
+
 int mypthread_yield() {
 
 	// change thread state from Running to Ready
@@ -43,7 +58,13 @@ int mypthread_yield() {
 	// switch from thread context to scheduler context
 
 	// YOUR CODE HERE
+    if(tcb->state != READY) {
+        return -1;
+    }
     tcb->state = RUNNING;
+    swapcontext(&tcb->ucp, &sched_ucp);
+
+    return 0;
 };
 
 /* terminate a thread */
@@ -51,6 +72,8 @@ void mypthread_exit(void *value_ptr) {
 	// Deallocated any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
+    free(tcb->ucp.uc_stack.ss_sp);
+    enqueue_head(&join_queue, node_create(tcb->id, value_ptr));
 };
 
 
@@ -61,6 +84,9 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
 	// de-allocate any dynamic memory created by the joining thread
 
 	// YOUR CODE HERE
+
+    tcb->state = BLOCKED;
+
 	return 0;
 };
 
@@ -105,7 +131,7 @@ int mypthread_mutex_destroy(mypthread_mutex_t *mutex) {
 /* scheduler */
 static void schedule() {
 	// Every time when timer interrup happens, your thread library
-	// should be contexted switched from thread context to this
+	// should be context switched from thread context to this
 	// schedule function
 
 	// Invoke different actual scheduling algorithms
@@ -147,11 +173,15 @@ static void sched_mlfq() {
 
 // YOUR CODE HERE
 /* create node */
-struct node_ *node_create() {
+struct node_ *node_create(int id, void *value_ptr) {
     node_ *node = malloc(sizeof(node_));
     if(node == NULL) {
         perror("node_create(): failed to allocate node.");
     }
+    node->id = id;
+    node->value_ptr = value_ptr;
+    node->next = NULL;
+    node->prev = NULL;
     return node;
 }
 
@@ -167,6 +197,20 @@ struct queue_ *queue_create() {
         perror("queue_create(): failed to allocate node.");
     }
     return q;
+}
+
+/* add node to front of queue */
+void enqueue_head(queue_ *q, node_ *node) {
+    node->next = q->head;
+    q->head->prev = node;
+    q->head = node;
+}
+
+/* add node to back of queue */
+void enqueue_rear(queue_ *q, node_ *node) {
+    node->prev = q->rear;
+    q->rear->next = node;
+    q->rear = node;
 }
 
 /* pop head of queue */
