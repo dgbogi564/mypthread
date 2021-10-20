@@ -38,9 +38,9 @@ typedef struct threadControlBlock {
 
 	// YOUR CODE HERE
     ucontext_t ucp;                 /* thread context */
-    int id;                         /* thread id */
     int priority;                   /* priority number — the lower the number, the higher the priority */
     mypthread_state state;          /* state of the thread */
+    mypthread_t thread;             /* thread */
 } threadControlBlock;
 
 /* mutex struct definition */
@@ -54,16 +54,17 @@ typedef struct mypthread_mutex_t {
 
 // YOUR CODE HERE
 typedef struct node_ {
-    int id;
-    void *value_ptr;
-    struct node_ *next;
-    struct node_ *prev;
+    mypthread_t thread;             /* thread */
+    threadControlBlock *ptcb;       /* parent thread control block */
+    void *ret_val;                  /* return value */
+    struct node_ *next;             /* next node */
+    struct node_ *prev;             /* prev node */
 } node_;
 
 typedef struct queue_ {
-    unsigned int size;
-    node_ *head;
-    node_ *rear;
+    unsigned int size;              /* queue size */
+    node_ *head;                    /* pointer to head of queue */
+    node_ *rear;                    /* pointer to rear of queue */
 } queue_;
 
 /* Function Declarations: */
@@ -76,7 +77,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr, void
 int mypthread_yield();
 
 /* terminate a thread */
-void mypthread_exit(void *value_ptr);
+void mypthread_exit(void *ret_val);
 
 /* wait for thread termination */
 int mypthread_join(mypthread_t thread, void **value_ptr);
@@ -118,8 +119,22 @@ static void sched_mlfq();
 
 
 // YOUR CODE HERE
+
+/* initialize tcb */
+void *tcb_init(mypthread_t *thread, void *(*function)(void*), void * arg);
+
+/* cleanup tcb */
+void *tcb_clean();
+
+/* initialize tcb */
+void *tcb_init(mypthread_t *thread, void *(*function)(void*), void * arg);
+
+/* destroy tcb */
+void *tcb_destroy(threadControlBlock *ftcb);
+
+
 /* create node */
-struct node_ *node_create(int id, void *value_ptr);
+struct node_ *node_create(mypthread_t thread, threadControlBlock *ptcb, void *ret_val);
 
 /* destroy node */
 void *node_destroy(node_ *node);
