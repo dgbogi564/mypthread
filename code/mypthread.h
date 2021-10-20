@@ -22,10 +22,12 @@
 
 typedef uint mypthread_t;
 
+// Feel free to add any other variables you need
 
-typedef enum mypthread_state {
-    RUNNING, READY, BLOCKED, JOIN, DEAD, MUTEX_WAIT
-} mypthread_state;
+// YOUR CODE HERE
+typedef enum state {
+    READY, RUNNING, BLOCKED, JOIN, DEAD, MUTEX_WAIT
+} state_;
 
 typedef struct threadControlBlock {
 	/* add important states in a thread control block */
@@ -37,15 +39,21 @@ typedef struct threadControlBlock {
 	// And more ...
 
 	// YOUR CODE HERE
-    ucontext_t ucp;                 /* thread context */
-    int priority;                   /* priority number — the lower the number, the higher the priority */
-    mypthread_state state;          /* state of the thread */
-    mypthread_t thread;             /* thread */
-} threadControlBlock;
+    ucontext_t ucp;                         /* thread context */
+    unsigned int priority;                  /* thread priority: lower the number, greater the priority */
+    state_ state;                           /* thread state */
+    mypthread_t th_id;                      /* thread id */
+    mypthread_t join_th;                    /* id of thread to join to */
+    void *ret_val;                          /* return value */
+    struct threadControlBlock *join_list;   /* thread join list */
+    struct threadControlBlock *prev;        /* previous thread */
+    struct threadControlBlock *next;        /* next thread */
+} tcb_;
 
 /* mutex struct definition */
 typedef struct mypthread_mutex_t {
 	/* add something here */
+
 	// YOUR CODE HERE
 } mypthread_mutex_t;
 
@@ -53,19 +61,32 @@ typedef struct mypthread_mutex_t {
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
 // YOUR CODE HERE
-typedef struct node_ {
-    mypthread_t thread;             /* thread */
-    threadControlBlock *ptcb;       /* parent thread control block */
-    void *ret_val;                  /* return value */
-    struct node_ *next;             /* next node */
-    struct node_ *prev;             /* prev node */
+/* policy enum definition */
+typedef enum policy {
+    FIFO, PRIORITY, STCF, MLFQ
+} policy_;
+
+/* schedule struct definition */
+typedef struct schedule {
+    unsigned int size;                      /* schedule size */
+    policy_ policy;                         /* schedule policy */
+    ucontext_t ucp;                         /* scheduler context */
+    tcb_ *head;                             /* first tcb of schedule */
+    tcb_ *rear;                             /* last tcb of schedule */
+} schedule_;
+
+/* node struct definition */
+typedef struct node {
+    tcb_ *tcb;                              /* thread control block pointer */
+    struct node *next;                      /* next node */
 } node_;
 
-typedef struct queue_ {
-    unsigned int size;              /* queue size */
-    node_ *head;                    /* pointer to head of queue */
-    node_ *rear;                    /* pointer to rear of queue */
-} queue_;
+/* list struct definition */
+typedef struct list {
+    unsigned int size;                      /* list size */
+    node_ *head;                            /* first node of list */
+    node_ *rear;                            /* last node of list */
+}list_;
 
 /* Function Declarations: */
 
@@ -73,11 +94,11 @@ typedef struct queue_ {
 int mypthread_create(mypthread_t * thread, pthread_attr_t * attr, void
     *(*function)(void*), void * arg);
 
-/* give CPU possession to other user level threads voluntarily */
+/* give CPU pocession to other user level threads voluntarily */
 int mypthread_yield();
 
 /* terminate a thread */
-void mypthread_exit(void *ret_val);
+void mypthread_exit(void *value_ptr);
 
 /* wait for thread termination */
 int mypthread_join(mypthread_t thread, void **value_ptr);
@@ -86,7 +107,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr);
 int mypthread_mutex_init(mypthread_mutex_t *mutex, const pthread_mutexattr_t
     *mutexattr);
 
-/* acquire the mutex lock */
+/* aquire the mutex lock */
 int mypthread_mutex_lock(mypthread_mutex_t *mutex);
 
 /* release the mutex lock */
@@ -107,55 +128,41 @@ int mypthread_mutex_destroy(mypthread_mutex_t *mutex);
 #define pthread_mutex_destroy mypthread_mutex_destroy
 #endif
 
-
-/* scheduler */
-static void schedule();
-
-/* Preemptive SJF (STCF) scheduling algorithm */
-static void sched_stcf();
-
-/* Preemptive MLFQ scheduling algorithm */
-static void sched_mlfq();
-
+// Feel free to add any other functions you need
 
 // YOUR CODE HERE
+/* initialize schedule */
+void schedule_init();
 
-/* initialize tcb */
-void *tcb_init(mypthread_t *thread, void *(*function)(void*), void * arg);
+/* clean schedule */
+void schedule_clean();
 
-/* cleanup tcb */
-void *tcb_clean();
+/* create thread control block */
+tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void*), void * arg);
 
-/* initialize tcb */
-void *tcb_init(mypthread_t *thread, void *(*function)(void*), void * arg);
+/* add tcb to schedule */
+void add_tcb(tcb_ *tcb);
 
-/* destroy tcb */
-void *tcb_destroy(threadControlBlock *ftcb);
+/* pop tcb from schedule */
+tcb_ * pop_tcb();
 
+/* destroy thread control block */
+void * tcb_destroy(tcb_ *tcb);
+
+
+/* create list */
+list_ * list_create();
+
+/* destroy list */
+void destroy_list(list_ *list);
 
 /* create node */
-struct node_ *node_create(mypthread_t thread, threadControlBlock *ptcb, void *ret_val);
+node_ node_create();
+
+/* add node to list */
+void add_node(list_ *list, node_ *node);
 
 /* destroy node */
-void *node_destroy(node_ *node);
-
-/* create queue */
-struct queue_ *queue_create();
-
-/* add node to front of queue */
-void enqueue_head(queue_ *q, node_ *node);
-
-/* add node to back of queue */
-void enqueue_rear(queue_ *q, node_ *node);
-
-/* pop head of queue */
-struct node_* pop_head(queue_ *q);
-
-/* pop rear of queue */
-struct node_* pop_rear(queue_ *q);
-
-/* destroy queue */
-void *queue_destroy(queue_ *q);
-
+void node_destroy(node_ *node);
 
 #endif
