@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <ucontext.h>
 #include <bits/semaphore.h>
+#include <sys/time.h>
 
 typedef uint mypthread_t;
 typedef struct queue queue_;
@@ -48,6 +49,8 @@ typedef struct threadControlBlock {
     mypthread_t join_th;                    /* id of thread to join to */
     void *ret_val;                          /* return value */
     queue_ *join_queue;                     /* thread join queue */
+    struct itimerval *start;                /* time when the thread starts working */
+    struct itimerval *end;                  /* time when the thread finishes */
 } tcb_;
 
 /* mutex struct definition */
@@ -62,15 +65,9 @@ typedef struct mypthread_mutex_t {
 // Feel free to add your own auxiliary data structures (linked queue or queue etc...)
 
 // YOUR CODE HERE
-/* policy enum definition */
-typedef enum policy {
-    FIFO, PRIORITY, STCF, MLFQ
-} policy_;
-
 /* schedule struct definition */
 typedef struct schedule {
-    unsigned int size;                      /* schedule size */
-    policy_ policy;                         /* schedule policy */
+    volatile unsigned int num_threads;      /* schedule size */
     ucontext_t ucp;                         /* scheduler context */
     queue_ *q;                              /* thread queue */
     queue_ *all_tcbs;                       /* list of all tcbs */

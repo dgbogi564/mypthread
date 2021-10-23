@@ -27,6 +27,7 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
         schedule_init();
     }
     enqueue(sched.q, (curr_tcb = tcb_create(*thread, curr_tcb->join_th, function, arg)), 1);
+    sched.num_threads++;
     return 0;
 }
 
@@ -61,6 +62,7 @@ void mypthread_exit(void *value_ptr) {
         }
         node = node->next;
     }
+    sched.num_threads--;
 }
 
 
@@ -170,6 +172,7 @@ static void schedule() {
 // schedule policy
 #ifndef MLFQ
 	// Choose STCF
+
 #else
 	// Choose MLFQ
 #endif
@@ -197,8 +200,7 @@ static void sched_mlfq() {
 // YOUR CODE HERE
 /* initialize schedule */
 void schedule_init() {
-    sched.size = 0;
-    sched.policy = FIFO;
+    sched.num_threads = 0;
     getcontext(&sched.ucp);
     sched.ucp.uc_stack.ss_sp = malloc(STACKSIZE);
     sched.ucp.uc_stack.ss_size = STACKSIZE;
