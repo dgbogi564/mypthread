@@ -1,6 +1,6 @@
 // File:	mypthread.c
 
-// List all group member's name:
+// queue all group member's name:
 // username of iLab:
 // iLab Server:
 
@@ -8,10 +8,11 @@
 
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
-#define STACKSIZE 4096
-schedule_ sched;
-int schedule_initialized = 0;
-tcb_ *curr_tcb;   /* current tcb */
+#define STACKSIZE 4096          /* size of stack */
+#define DEFAULT_QUANTUM 5;      /* default time quantum */
+schedule_ sched;                /* scheduler information (contains tcb queue) */
+int schedule_initialized = 0;   /* variable used to check if the scheduler has been initialized */
+tcb_ *curr_tcb;                 /* current tcb */
 
 
 /* create a new thread */
@@ -25,9 +26,9 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
     if(!schedule_initialized) {
         schedule_init();
     }
-    add_tcb((curr_tcb = tcb_create(*thread, curr_tcb->join_th, function, arg)));
+    enqueue(sched.q, (curr_tcb = tcb_create(*thread, curr_tcb->join_th, function, arg)), 1);
     return 0;
-};
+}
 
 /* give CPU possession to other user-level threads voluntarily */
 int mypthread_yield() {
@@ -37,41 +38,30 @@ int mypthread_yield() {
 	// switch from thread context to scheduler context
 
 	// YOUR CODE HERE
-    if(curr_tcb->state == READY) {
-        return -1;
-    }
     curr_tcb->state = READY;
-    add_tcb(curr_tcb);
     swapcontext(&curr_tcb->ucp, &sched.ucp);
 	return 0;
-};
+}
 
 /* terminate a thread */
 void mypthread_exit(void *value_ptr) {
 	// Deallocated any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
-    curr_tcb->state = JOIN;
+    curr_tcb->state = DEAD;
     curr_tcb->ret_val = value_ptr;
-    tcb_ *tcb = sched.head;
-    while(tcb != NULL) {
-        tcb_ *temp = tcb->next;
+    node_ *node = sched.all_tcbs->head;
+    while(node != NULL) {
+        tcb_ *tcb = node->tcb;
         if(tcb->th_id == curr_tcb->join_th) {
+            enqueue(tcb->join_queue, tcb, 0);
             tcb->state = READY;
-            if(tcb->join_list == NULL) {
-                tcb->join_list = curr_tcb;
-            } else {
-                tcb_ *temp2 = tcb->join_list;
-                while(temp2->next != NULL) {
-                    temp2 = temp2->next;
-                }
-                temp2->next = curr_tcb;
-            }
+            enqueue(sched.q, tcb, 1);
             break;
         }
-        tcb = temp;
+        node = node->next;
     }
-};
+}
 
 
 /* Wait for thread termination */
@@ -81,20 +71,28 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
 	// de-allocate any dynamic memory created by the joining thread
 
 	// YOUR CODE HERE
-    if(curr_tcb->join_list == NULL) {
-        curr_tcb->state = BLOCKED;
-        mypthread_yield();
-    }
-    tcb_ *temp = curr_tcb->join_list;
-    while(temp != NULL) {
-        if(temp->th_id == thread) {
-            value_ptr = temp->ret_val;
-            break;
+    node_ *head = curr_tcb->join_queue->head;
+    state_ *state = &curr_tcb->state;
+    do {
+        node_ *node = head;
+        while(node != NULL) {
+            tcb_ *tcb = node->tcb;
+            if(tcb->th_id == thread) {
+                value_ptr = tcb->ret_val;
+                free(node);
+                curr_tcb->state = RUNNING;
+                break;
+            }
+            node = node->next;
         }
-        temp = temp->next;
-    }
+        if(curr_tcb->state == BLOCKED) {
+            mypthread_yield();
+            curr_tcb->state = BLOCKED;
+        }
+    } while(*state == BLOCKED);
+
 	return 0;
-};
+}
 
 /* initialize the mutex lock */
 int mypthread_mutex_init(mypthread_mutex_t *mutex,
@@ -102,42 +100,61 @@ int mypthread_mutex_init(mypthread_mutex_t *mutex,
 	//initialize data structures for this mutex
 
 	// YOUR CODE HERE
+    mutex->flag = 0;
+    mutex->wait_q = queue_create();
 	return 0;
-};
+}
 
-/* aquire the mutex lock */
+/* acquire the mutex lock */
 int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
-        // use the built-in test-and-set atomic function to test the mutex
-        // if the mutex is acquired successfully, enter the critical section
-        // if acquiring mutex fails, push current thread into block list and //
-        // context switch to the scheduler thread
+    // use the built-in test-and-set atomic function to test the mutex
+    // if the mutex is acquired successfully, enter the critical section
+    // if acquiring mutex fails, push current thread into block queue and //
+    // context switch to the scheduler thread
 
-        // YOUR CODE HERE
-        return 0;
-};
+    // YOUR CODE HERE
+    while(__atomic_test_and_set(mutex->flag, __ATOMIC_SEQ_CST)) {
+        enqueue(mutex->wait_q, curr_tcb, 0);
+        mypthread_yield();
+    }
+    return 0;
+}
 
 /* release the mutex lock */
 int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
 	// Release mutex and make it available again.
-	// Put threads in block list to run queue
+	// Put threads in block queue to run queue
 	// so that they could compete for mutex later.
 
 	// YOUR CODE HERE
+    queue_ *wait_q = mutex->wait_q;
+    node_ *node = wait_q->head;
+    while(node != NULL) {
+        node_ *temp = node->next;
+        node->tcb->state = READY;
+        enqueue(sched.q, node->tcb, 1);
+        node_destroy(node);
+        node = temp;
+    }
+    wait_q->head = NULL;
+    wait_q->rear = NULL;
+    __atomic_clear(mutex->flag, __ATOMIC_SEQ_CST);
 	return 0;
-};
+}
 
 
 /* destroy the mutex */
 int mypthread_mutex_destroy(mypthread_mutex_t *mutex) {
 	// Deallocate dynamic memory created in mypthread_mutex_init
-
+    queue_destroy(mutex->wait_q);
+    free(mutex);
 	return 0;
-};
+}
 
 /* scheduler */
 static void schedule() {
-	// Every time when timer interrup happens, your thread library
-	// should be contexted switched from thread context to this
+	// Every time when timer interrupt happens, your thread library
+	// should be context switched from thread context to this
 	// schedule function
 
 	// Invoke different actual scheduling algorithms
@@ -176,40 +193,31 @@ static void sched_mlfq() {
 }
 
 // Feel free to add any other functions you need
-static void sched_fifo() {
-
-}
-
-static void sched_priority() {
-
-}
-
 
 // YOUR CODE HERE
 /* initialize schedule */
 void schedule_init() {
     sched.size = 0;
     sched.policy = FIFO;
-    sched.head = NULL;
-    sched.rear = NULL;
     getcontext(&sched.ucp);
     sched.ucp.uc_stack.ss_sp = malloc(STACKSIZE);
     sched.ucp.uc_stack.ss_size = STACKSIZE;
     sched.ucp.uc_stack.ss_flags = 0;
     makecontext(&sched.ucp, schedule, 1);
+    sched.q = queue_create();
     schedule_initialized = 1;
 }
 
 /* clean schedule */
 void schedule_clean() {
-    tcb_ *tcb = sched.head;
-    while (tcb != NULL) {
-        tcb_ *temp = tcb->next;
-        tcb_destroy(tcb);
-        tcb = temp;
+    node_ *node = sched.all_tcbs->head;
+    while (node != NULL) {
+        node_ *temp = node->next;
+        tcb_destroy(node->tcb);
+        node_destroy(node);
+        node = temp;
     }
-    sched.head = NULL;
-    sched.rear = NULL;
+    sched.q = NULL;
     free(sched.ucp.uc_stack.ss_sp);
     sched.ucp.uc_stack.ss_sp = NULL;
 }
@@ -217,91 +225,102 @@ void schedule_clean() {
 /* create thread control block */
 tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void*), void * arg) {
     tcb_ *tcb = malloc(sizeof(tcb_));
-
     getcontext(&tcb->ucp);
     tcb->ucp.uc_stack.ss_sp = malloc(STACKSIZE);
     tcb->ucp.uc_stack.ss_size = STACKSIZE;
     tcb->ucp.uc_flags = 0;
     makecontext(&tcb->ucp, (void (*)(void)) function, 2, arg);
-    tcb->priority = 0;
+    tcb->quantum = DEFAULT_QUANTUM;
     tcb->state = READY;
     tcb->th_id = th_id;
     tcb->join_th = join_th;
     tcb->ret_val = NULL;
-    tcb->join_list = NULL;
-    tcb->prev = NULL;
-    tcb->next = NULL;
+    queue_create(tcb->join_queue);
     return tcb;
 }
 
 /* add tcb to schedule */
-void add_tcb(tcb_ *tcb) {
-    // TODO implement 4 functions?
-    //  Make sure to keep in mind prev node as well.
-    /*
-    switch(sched.policy) {
-        // FIFO
-        case 0: { sched_fifo(tcb_ *tcb); } return;
-
-        // PRIORITY
-        case 1: { sched_priority(tcb_ *tcb); } return;
-
-        // STCF
-        case 2: { sched_stcf(tcb_ *tcb); } return;
-
-        // MLFQ
-        case 3: { sched_mlfq(tcb_ *tcb); } return;
+void enqueue(queue_ *queue, tcb_ *tcb, int use_quantum) {
+    node_ *node = node_create(tcb);
+    if(!queue->size) {
+        queue->head = node;
+        queue->rear = node;
+        return;
     }
-    */
+    node_ *temp = NULL;
+    if(use_quantum) {
+        int quantum = tcb->quantum;
+        node_ *prev = NULL;
+        temp = queue->head;
+        while(temp != NULL) {
+            if(quantum < temp->tcb->quantum) {
+                if(prev == NULL) {
+                    queue->head = temp;
+                }
+                node->next = temp;
+                break;
+            }
+            prev = temp;
+            temp = temp->next;
+        }
+    }
+    if(!use_quantum || temp == NULL) {
+        queue->rear->next = node;
+        queue->rear = node;
+    }
 }
 
-tcb_ * pop_tcb() {
-    tcb_ *tcb = sched.rear;
-    sched.rear = tcb->prev;
-    if(sched.head == tcb) {
-        sched.head = NULL;
+tcb_ * pop_tcb(queue_ *queue) {
+    node_ *node = queue->rear;
+    tcb_ * tcb = node->tcb;
+    queue->rear = node->prev;
+    if(queue->head == queue->rear) {
+        queue->head = NULL;
     }
+    node_destroy(node);
     return tcb;
 }
 
 /* destroy thread control block */
 void * tcb_destroy(tcb_ *tcb) {
+    queue_destroy(tcb->join_queue);
     free(tcb->ucp.uc_stack.ss_sp);
     free(tcb);
 }
 
 
-/* create list */
-list_ * list_create() {
-    list_ *list = malloc(sizeof(list_));
-    return list;
+/* create queue */
+queue_ * queue_create() {
+    queue_ *queue = malloc(sizeof(queue_));
+    return queue;
 }
 
-/* destroy list */
-void destroy_list(list_ *list) {
-    node_ *node = list->head;
+/* destroy queue */
+void queue_destroy(queue_ *queue) {
+    node_ *node = queue->head;
     while(node != NULL) {
         node_ *temp = node->next;
         node_destroy(node);
         node = temp;
     }
-    free(list);
+    free(queue);
 }
 
 /* create node */
-node_ node_create(tcb_ *tcb) {
+node_ * node_create(tcb_ *tcb) {
     node_ *node = malloc (sizeof(node_));
     node->tcb = tcb;
+    return node;
 }
 
-/* add node to list */
-void add_node(list_ *list, node_ *node) {
-    if(list->head == NULL) {
-        list->head = node;
-        list->rear = node;
+/* add node to queue */
+void add_node(queue_ *queue, node_ *node) {
+    if(queue->head == NULL) {
+        queue->head = node;
+        queue->rear = node;
     } else {
-        list->rear->next = node;
-        list->rear = node;
+        queue->rear->next = node;
+        queue->rear = node;
     }
 }
 

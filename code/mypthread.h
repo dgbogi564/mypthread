@@ -1,6 +1,6 @@
 // File:	mypthread_t.h
 
-// List all group member's name: David Gbogi,
+// queue all group member's name: David Gbogi,
 // username of iLab: dog12,
 // iLab Server: ilab.cs.rutgers.edu
 
@@ -19,14 +19,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ucontext.h>
+#include <bits/semaphore.h>
 
 typedef uint mypthread_t;
+typedef struct queue queue_;
 
 // Feel free to add any other variables you need
 
 // YOUR CODE HERE
 typedef enum state {
-    READY, RUNNING, BLOCKED, JOIN, DEAD, MUTEX_WAIT
+    READY, RUNNING, BLOCKED, DEAD
 } state_;
 
 typedef struct threadControlBlock {
@@ -39,26 +41,25 @@ typedef struct threadControlBlock {
 	// And more ...
 
 	// YOUR CODE HERE
+    int quantum;                            /* time quantum of thread */
     ucontext_t ucp;                         /* thread context */
-    unsigned int priority;                  /* thread priority: lower the number, greater the priority */
     state_ state;                           /* thread state */
     mypthread_t th_id;                      /* thread id */
     mypthread_t join_th;                    /* id of thread to join to */
     void *ret_val;                          /* return value */
-    struct threadControlBlock *join_list;   /* thread join list */
-    struct threadControlBlock *prev;        /* previous thread */
-    struct threadControlBlock *next;        /* next thread */
+    queue_ *join_queue;                     /* thread join queue */
 } tcb_;
 
 /* mutex struct definition */
 typedef struct mypthread_mutex_t {
 	/* add something here */
-
 	// YOUR CODE HERE
+    volatile unsigned char *flag;
+    queue_ * wait_q;
 } mypthread_mutex_t;
 
 /* define your data structures here: */
-// Feel free to add your own auxiliary data structures (linked list or queue etc...)
+// Feel free to add your own auxiliary data structures (linked queue or queue etc...)
 
 // YOUR CODE HERE
 /* policy enum definition */
@@ -71,22 +72,23 @@ typedef struct schedule {
     unsigned int size;                      /* schedule size */
     policy_ policy;                         /* schedule policy */
     ucontext_t ucp;                         /* scheduler context */
-    tcb_ *head;                             /* first tcb of schedule */
-    tcb_ *rear;                             /* last tcb of schedule */
+    queue_ *q;                              /* thread queue */
+    queue_ *all_tcbs;                       /* list of all tcbs */
 } schedule_;
 
 /* node struct definition */
 typedef struct node {
     tcb_ *tcb;                              /* thread control block pointer */
     struct node *next;                      /* next node */
+    struct node *prev;                      /* prev node */
 } node_;
 
-/* list struct definition */
-typedef struct list {
-    unsigned int size;                      /* list size */
-    node_ *head;                            /* first node of list */
-    node_ *rear;                            /* last node of list */
-}list_;
+/* queue struct definition */
+struct queue {
+    unsigned int size;                      /* queue size */
+    node_ *head;                            /* first node of queue */
+    node_ *rear;                            /* last node of queue */
+};
 
 /* Function Declarations: */
 
@@ -138,29 +140,29 @@ void schedule_init();
 void schedule_clean();
 
 /* create thread control block */
-tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void*), void * arg);
+tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void*), void *arg);
 
 /* add tcb to schedule */
-void add_tcb(tcb_ *tcb);
+void enqueue(queue_ *queue, tcb_ *tcb, int use_quantum);
 
 /* pop tcb from schedule */
-tcb_ * pop_tcb();
+node_ * dequeue();
 
 /* destroy thread control block */
 void * tcb_destroy(tcb_ *tcb);
 
 
-/* create list */
-list_ * list_create();
+/* create queue */
+queue_ * queue_create();
 
-/* destroy list */
-void destroy_list(list_ *list);
+/* destroy queue */
+void queue_destroy(queue_ *queue);
 
 /* create node */
-node_ node_create();
+node_ * node_create();
 
-/* add node to list */
-void add_node(list_ *list, node_ *node);
+/* add node to queue */
+void add_node(queue_ *queue, node_ *node);
 
 /* destroy node */
 void node_destroy(node_ *node);
