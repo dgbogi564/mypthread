@@ -12,7 +12,8 @@
 #define QUANTUM 5                           /* time of a single quantum */
 schedule_ sched;                            /* scheduler information (contains tcb queue) */
 volatile int first_run = 1;                 /* variable used to check if this is the first run of the library  */
-tcb_ *curr_tcb;                             /* current tcb */
+tcb_ mtcb = {0};                            /* main tcb */
+tcb_ *ctcb;                                 /* current tcb */
 
 static void sched_stcf();
 static void schedule();
@@ -26,14 +27,18 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
     // allocate space of stack for this thread to run
     // after everything is all set, push this thread int
     // YOUR CODE HERE
-    if(!first_run) {
+    schedule_ *sched_ptr = &sched;
+    tcb_ **ctcb_ptr = &ctcb;
+    if(first_run) {
         schedule_init();
-        curr_tcb = &(tcb_){0};
+        ctcb = &mtcb;
         first_run = 0;
     }
-    enqueue(sched.all_tcbs, tcb_create(*thread, curr_tcb->th_id, function, arg));
-    enqueue(sched.q, tcb_create(*thread, curr_tcb->th_id, function, arg));
-    sched.num_threads++;
+    tcb_ *tcb = tcb_create(*thread, ctcb->th_id, function, arg);
+    enqueue(sched.all_tcbs, tcb);
+    enqueue(sched.q, tcb);
+    sched.num_threads++
+
     schedule();
     return 0;
 }
@@ -46,9 +51,9 @@ int mypthread_yield() {
 	// switch from thread context to scheduler context
 
 	// YOUR CODE HERE
-    curr_tcb->state = READY;
-    curr_tcb->elapsed++;
-    swapcontext(&curr_tcb->ucp, &sched.ucp);
+    ctcb->state = READY;
+    ctcb->elapsed++;
+    swapcontext(&ctcb->ucp, &sched.ucp);
 	return 0;
 }
 
@@ -57,12 +62,12 @@ void mypthread_exit(void *value_ptr) {
 	// Deallocated any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
-    curr_tcb->state = DEAD;
-    curr_tcb->ret_val = value_ptr;
+    ctcb->state = DEAD;
+    ctcb->ret_val = value_ptr;
     node_ *node = sched.all_tcbs->head;
     while(node != NULL) {
         tcb_ *tcb = node->tcb;
-        if(tcb->th_id == curr_tcb->join_th) {
+        if(tcb->th_id == ctcb->join_th) {
             enqueue(tcb->join_queue, tcb);
             tcb->state = DEAD;
             dequeue(sched.q, tcb);
@@ -82,8 +87,8 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
 	// de-allocate any dynamic memory created by the joining thread
 
 	// YOUR CODE HERE
-    node_ *head = curr_tcb->join_queue->head;
-    state_ *state = &curr_tcb->state;
+    node_ *head = ctcb->join_queue->head;
+    state_ *state = &ctcb->state;
     do {
         node_ *node = head;
         while(node != NULL) {
@@ -92,19 +97,19 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
                 value_ptr = tcb->ret_val;
                 tcb_destroy(tcb);
                 node_destroy(node);
-                curr_tcb->state = RUNNING;
+                ctcb->state = RUNNING;
                 break;
             }
             node = node->next;
         }
-        if(curr_tcb->state == BLOCKED) {
+        if(ctcb->state == BLOCKED) {
             mypthread_yield();
-            curr_tcb->state = BLOCKED;
+            ctcb->state = BLOCKED;
         }
     } while(*state == BLOCKED);
 
     if(sched.num_threads < 1) {
-        schedule_clean();
+        clean_global();
     }
 
 	return 0;
@@ -130,7 +135,7 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
 
     // YOUR CODE HERE
     while(__atomic_test_and_set(mutex->flag, __ATOMIC_SEQ_CST)) {
-        enqueue(mutex->wait_q, curr_tcb);
+        enqueue(mutex->wait_q, ctcb);
         mypthread_yield();
     }
     return 0;
@@ -239,8 +244,8 @@ void schedule_init() {
 }
 
 /* clean schedule */
-void schedule_clean() {
-    /* Free ThreadControlBlocks */
+void clean_global() {
+    // Free ThreadControlBlocks (not freed in queue_destroy())
     node_ *node = sched.all_tcbs->head;
     while (node != NULL) {
         node_ *temp = node->next;
@@ -248,8 +253,8 @@ void schedule_clean() {
         node_destroy(node);
         node = temp;
     }
-    free(sched.all_tcbs);
     /* Free schedule */
+    free(sched.all_tcbs);
     queue_destroy(sched.q);
     sched.q = NULL;
     free(sched.ucp.uc_stack.ss_sp);

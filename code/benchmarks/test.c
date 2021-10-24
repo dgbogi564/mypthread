@@ -20,9 +20,9 @@ int main(int argc, char **argv) {
 
 	/* Implement HERE */
     pthread_t th[0];
-    pthread_create(th[0], NULL, test, NULL);
+    pthread_create(&th[0], NULL, test, NULL);
     int *ret_val;
-    pthread_join(th[0], &ret_val);
+    pthread_join(&th[0], &ret_val);
     printf("return value: %d", *ret_val);
 	return 0;
 }

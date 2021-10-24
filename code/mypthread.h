@@ -130,8 +130,8 @@ int mypthread_mutex_destroy(mypthread_mutex_t *mutex);
 /* initialize schedule */
 void schedule_init();
 
-/* clean schedule */
-void schedule_clean();
+/* clean global variables */
+void clean_global();
 
 /* create thread control block */
 tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void*), void *arg);
