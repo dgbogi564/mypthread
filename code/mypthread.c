@@ -12,7 +12,6 @@
 #define QUANTUM 5                           /* time of a single quantum */
 schedule_ sched;                            /* scheduler information (contains tcb queue) */
 volatile int first_run = 1;                 /* variable used to check if this is the first run of the library  */
-tcb_ mtcb = {0};                            /* main tcb */
 tcb_ *ctcb;                                 /* current tcb */
 
 static void sched_stcf();
@@ -31,15 +30,16 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
     tcb_ **ctcb_ptr = &ctcb;
     if(first_run) {
         schedule_init();
-        ctcb = &mtcb;
+        ctcb = tcb_create(0, 0, NULL, NULL);
+        enqueue(sched.all_tcbs, ctcb);
+        sched.num_threads++;
         first_run = 0;
     }
     tcb_ *tcb = tcb_create(*thread, ctcb->th_id, function, arg);
     enqueue(sched.all_tcbs, tcb);
     enqueue(sched.q, tcb);
-    sched.num_threads++
-
-    schedule();
+    sched.num_threads++;
+    swapcontext(&ctcb->ucp, &sched.ucp);
     return 0;
 }
 
@@ -87,6 +87,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
 	// de-allocate any dynamic memory created by the joining thread
 
 	// YOUR CODE HERE
+    tcb_ **ctcb_ptr = &ctcb;
     node_ *head = ctcb->join_queue->head;
     state_ *state = &ctcb->state;
     do {
@@ -108,7 +109,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
         }
     } while(*state == BLOCKED);
 
-    if(sched.num_threads < 1) {
+    if(sched.num_threads < 2) {
         clean_global();
     }
 
@@ -187,9 +188,9 @@ static void schedule() {
 	// 		sched_mlfq();
 
 	// YOUR CODE HERE
-
+    alarm(0);
+    enqueue(sched.q, ctcb);
 // schedule policy
-tcb_ * tcb;
 #ifndef MLFQ
 	// Choose STCF
     sched_stcf();
@@ -204,6 +205,7 @@ static void sched_stcf() {
     // (feel free to modify arguments and return types)
 
     // YOUR CODE HERE
+    schedule_ *sched_ptr = &sched;
     node_ *node = sched.q->head;
     tcb_ *tcb = node->tcb;
     while(node != NULL) {
@@ -215,9 +217,9 @@ static void sched_stcf() {
 
     node_destroy(dequeue(sched.q, tcb));
     /* set new sigaction and alarm */
-    sigaction(SIGALRM, &(struct sigaction){schedule}, NULL);
+    sigaction(SIGALRM, &(struct sigaction){schedule, 0, 0}, NULL);
     setitimer(ITIMER_REAL, &(struct itimerval){0, QUANTUM*1000}, NULL);
-    setcontext(&tcb->ucp);
+    swapcontext(&ctcb->ucp, &tcb->ucp);
 }
 
 /* Preemptive MLFQ scheduling algorithm */
@@ -274,7 +276,7 @@ tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void
     tcb->th_id = th_id;
     tcb->join_th = join_th;
     tcb->ret_val = NULL;
-    queue_create(tcb->join_queue);
+    tcb->join_queue = queue_create(tcb->join_queue);
     return tcb;
 }
 
@@ -284,10 +286,11 @@ void enqueue(queue_ *queue, tcb_ *tcb) {
     if(!queue->size) {
         queue->head = node;
         queue->rear = node;
-        return;
+    } else {
+        queue->rear->next = node;
+        queue->rear = node;
     }
-    queue->rear->next = node;
-    queue->rear = node;
+    queue->size++;
 }
 
 /* remove tcb from queue */
@@ -298,9 +301,11 @@ node_ * dequeue(queue_ *queue, tcb_ *tcb) {
         if(node->tcb == tcb) {
             if(prev == NULL) {
                 queue->head = node->next;
+                queue->size--;
                 return node;
             }
             prev->next = node->next;
+            queue->size--;
             return node;
         }
         prev = node;
@@ -319,6 +324,9 @@ void * tcb_destroy(tcb_ *tcb) {
 /* create queue */
 queue_ * queue_create() {
     queue_ *queue = malloc(sizeof(queue_));
+    queue->size = 0;
+    queue->head = NULL;
+    queue->rear = NULL;
     return queue;
 }
 
