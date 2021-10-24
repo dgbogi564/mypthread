@@ -12,8 +12,10 @@
  */
 
 void test(void *arg) {
-    printf("I am working!");
-    mypthread_exit(0);
+    printf("I am working!\n");
+    int *ret_val = malloc(sizeof(int));
+    *ret_val = 42;
+    mypthread_exit(ret_val);
 }
 
 int main(int argc, char **argv) {
@@ -22,7 +24,8 @@ int main(int argc, char **argv) {
     pthread_t th[0];
     pthread_create(&th[0], NULL, test, NULL);
     int *ret_val;
-    pthread_join(&th[0], &ret_val);
+    pthread_join(th[0], &ret_val);
     printf("return value: %d", *ret_val);
+    free(ret_val);
 	return 0;
 }

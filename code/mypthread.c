@@ -16,6 +16,7 @@ tcb_ *ctcb;                                 /* current tcb */
 
 static void sched_stcf();
 static void schedule();
+static void preempt();
 
 
 /* create a new thread */
@@ -51,8 +52,9 @@ int mypthread_yield() {
 	// switch from thread context to scheduler context
 
 	// YOUR CODE HERE
-    ctcb->state = READY;
-    ctcb->elapsed++;
+    if(ctcb->state == RUNNING) {
+        ctcb->state = READY;
+    }
     swapcontext(&ctcb->ucp, &sched.ucp);
 	return 0;
 }
@@ -62,21 +64,23 @@ void mypthread_exit(void *value_ptr) {
 	// Deallocated any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
-    ctcb->state = DEAD;
+    schedule_ *sched_ptr = &sched;
+    tcb_ **ctcb_ptr = &ctcb;
     ctcb->ret_val = value_ptr;
     node_ *node = sched.all_tcbs->head;
     while(node != NULL) {
         tcb_ *tcb = node->tcb;
         if(tcb->th_id == ctcb->join_th) {
-            enqueue(tcb->join_queue, tcb);
-            tcb->state = DEAD;
-            dequeue(sched.q, tcb);
-            dequeue(sched.all_tcbs, tcb);
+            enqueue(tcb->join_queue, ctcb);
+            node_destroy(dequeue(sched.all_tcbs, ctcb));
+            tcb->state = READY;
             break;
         }
         node = node->next;
     }
     sched.num_threads--;
+    ctcb->state = DEAD;
+    setcontext(&sched.ucp);
 }
 
 
@@ -87,27 +91,29 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
 	// de-allocate any dynamic memory created by the joining thread
 
 	// YOUR CODE HERE
+    schedule_ *sched_ptr = &sched;
     tcb_ **ctcb_ptr = &ctcb;
-    node_ *head = ctcb->join_queue->head;
     state_ *state = &ctcb->state;
+    ctcb->state = BLOCKED;
+    int waiting = 1;
     do {
-        node_ *node = head;
+        node_ *node = ctcb->join_queue->head;
         while(node != NULL) {
             tcb_ *tcb = node->tcb;
-            if(tcb->th_id == thread) {
-                value_ptr = tcb->ret_val;
-                tcb_destroy(tcb);
+            if(tcb->th_id == thread && tcb->state == DEAD) {
+                *value_ptr = tcb->ret_val;
+                dequeue(ctcb->join_queue, tcb);
                 node_destroy(node);
-                ctcb->state = RUNNING;
+                waiting = 0;
                 break;
             }
             node = node->next;
         }
-        if(ctcb->state == BLOCKED) {
-            mypthread_yield();
+        if(waiting) {
             ctcb->state = BLOCKED;
+            mypthread_yield();
         }
-    } while(*state == BLOCKED);
+    } while(waiting);
 
     if(sched.num_threads < 2) {
         clean_global();
@@ -189,7 +195,9 @@ static void schedule() {
 
 	// YOUR CODE HERE
     alarm(0);
-    enqueue(sched.q, ctcb);
+    if(ctcb->state != DEAD) {
+        enqueue(sched.q, ctcb);
+    }
 // schedule policy
 #ifndef MLFQ
 	// Choose STCF
@@ -197,8 +205,8 @@ static void schedule() {
 #else
 	// Choose MLFQ
 #endif
-    ;
 }
+
 /* Preemptive SJF (STCF) scheduling algorithm */
 static void sched_stcf() {
     // Your own implementation of STCF
@@ -206,10 +214,18 @@ static void sched_stcf() {
 
     // YOUR CODE HERE
     schedule_ *sched_ptr = &sched;
+    tcb_ **ctcb_ptr = &ctcb;
+    ctcb->elapsed++;
     node_ *node = sched.q->head;
+    while(node != NULL) {
+        if(node->tcb->state != BLOCKED) {
+            break;
+        }
+        node = node->next;
+    }
     tcb_ *tcb = node->tcb;
     while(node != NULL) {
-        if(tcb->elapsed < node->tcb->elapsed) {
+        if(node->tcb->state != BLOCKED && tcb->elapsed < node->tcb->elapsed) {
             tcb = node->tcb;
         }
         node = node->next;
@@ -217,9 +233,11 @@ static void sched_stcf() {
 
     node_destroy(dequeue(sched.q, tcb));
     /* set new sigaction and alarm */
-    sigaction(SIGALRM, &(struct sigaction){schedule, 0, 0}, NULL);
+    sigaction(SIGALRM, &(struct sigaction){preempt, 0, 0}, NULL);
     setitimer(ITIMER_REAL, &(struct itimerval){0, QUANTUM*1000}, NULL);
-    swapcontext(&ctcb->ucp, &tcb->ucp);
+    ctcb = tcb;
+    ctcb->state = RUNNING;
+    setcontext(&ctcb->ucp);
 }
 
 /* Preemptive MLFQ scheduling algorithm */
@@ -233,6 +251,13 @@ static void sched_mlfq() {
 // Feel free to add any other functions you need
 
 // YOUR CODE HERE
+
+/* handle preempts */
+static void preempt() {
+    ctcb->state = READY;
+    schedule();
+}
+
 /* initialize schedule */
 void schedule_init() {
     sched.num_threads = 0;
@@ -247,7 +272,8 @@ void schedule_init() {
 
 /* clean schedule */
 void clean_global() {
-    // Free ThreadControlBlocks (not freed in queue_destroy())
+    // Free schedule's tcb list (not freed in queue_destroy())
+    schedule_ *sched_ptr = &sched;
     node_ *node = sched.all_tcbs->head;
     while (node != NULL) {
         node_ *temp = node->next;
@@ -255,8 +281,8 @@ void clean_global() {
         node_destroy(node);
         node = temp;
     }
-    /* Free schedule */
     free(sched.all_tcbs);
+    /* Free rest of schedule */
     queue_destroy(sched.q);
     sched.q = NULL;
     free(sched.ucp.uc_stack.ss_sp);
@@ -266,17 +292,21 @@ void clean_global() {
 /* create thread control block */
 tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void*), void * arg) {
     tcb_ *tcb = malloc(sizeof(tcb_));
-    getcontext(&tcb->ucp);
-    tcb->ucp.uc_stack.ss_sp = malloc(STACKSIZE);
-    tcb->ucp.uc_stack.ss_size = STACKSIZE;
-    tcb->ucp.uc_flags = 0;
-    makecontext(&tcb->ucp, (void (*)(void)) function, 2, arg);
+
     tcb->elapsed = 0;
     tcb->state = READY;
     tcb->th_id = th_id;
     tcb->join_th = join_th;
+
+    getcontext(&tcb->ucp);
+    tcb->ucp.uc_stack.ss_sp = calloc(1, STACKSIZE);
+    tcb->ucp.uc_stack.ss_size = STACKSIZE;
+    tcb->ucp.uc_flags = 0;
+    makecontext(&tcb->ucp, (void (*)(void)) function, 2, arg);
+
     tcb->ret_val = NULL;
     tcb->join_queue = queue_create(tcb->join_queue);
+
     return tcb;
 }
 
@@ -301,10 +331,18 @@ node_ * dequeue(queue_ *queue, tcb_ *tcb) {
         if(node->tcb == tcb) {
             if(prev == NULL) {
                 queue->head = node->next;
+                if(queue->head == NULL) {
+                    queue->rear = NULL;
+                }
                 queue->size--;
                 return node;
             }
-            prev->next = node->next;
+            if(queue->rear == node) {
+                queue->rear = prev;
+                prev->next = NULL;
+            } else {
+                prev->next = node->next;
+            }
             queue->size--;
             return node;
         }

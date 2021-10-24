@@ -43,10 +43,10 @@ typedef struct threadControlBlock {
 
 	// YOUR CODE HERE
     int elapsed;                            /* amount of time quantums the thread has elapsed */
-    ucontext_t ucp;                         /* thread context */
     state_ state;                           /* thread state */
     mypthread_t th_id;                      /* thread id */
     mypthread_t join_th;                    /* id of thread to join to */
+    ucontext_t ucp;                         /* thread context */
     void *ret_val;                          /* return value */
     queue_ *join_queue;                     /* thread join queue */
 } tcb_;
