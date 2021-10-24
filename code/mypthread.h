@@ -19,8 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ucontext.h>
-#include <bits/semaphore.h>
 #include <sys/time.h>
+#include <signal.h>
 
 typedef uint mypthread_t;
 typedef struct queue queue_;
@@ -42,15 +42,13 @@ typedef struct threadControlBlock {
 	// And more ...
 
 	// YOUR CODE HERE
-    int quantum;                            /* time quantum of thread */
+    int elapsed;                            /* amount of time quantums the thread has elapsed */
     ucontext_t ucp;                         /* thread context */
     state_ state;                           /* thread state */
     mypthread_t th_id;                      /* thread id */
     mypthread_t join_th;                    /* id of thread to join to */
     void *ret_val;                          /* return value */
     queue_ *join_queue;                     /* thread join queue */
-    struct itimerval *start;                /* time when the thread starts working */
-    struct itimerval *end;                  /* time when the thread finishes */
 } tcb_;
 
 /* mutex struct definition */
@@ -77,7 +75,6 @@ typedef struct schedule {
 typedef struct node {
     tcb_ *tcb;                              /* thread control block pointer */
     struct node *next;                      /* next node */
-    struct node *prev;                      /* prev node */
 } node_;
 
 /* queue struct definition */
@@ -139,15 +136,14 @@ void schedule_clean();
 /* create thread control block */
 tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void*), void *arg);
 
-/* add tcb to schedule */
-void enqueue(queue_ *queue, tcb_ *tcb, int use_quantum);
+/* add tcb to queue */
+void enqueue(queue_ *queue, tcb_ *tcb);
 
-/* pop tcb from schedule */
-node_ * dequeue();
+/* remove tcb from queue */
+node_ * dequeue(queue_ *queue, tcb_ *tcb);
 
 /* destroy thread control block */
 void * tcb_destroy(tcb_ *tcb);
-
 
 /* create queue */
 queue_ * queue_create();
