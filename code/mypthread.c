@@ -101,9 +101,11 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
         while(node != NULL) {
             tcb_ *tcb = node->tcb;
             if(tcb->th_id == thread && tcb->state == DEAD) {
-                *value_ptr = tcb->ret_val;
-                dequeue(ctcb->join_queue, tcb);
-                node_destroy(node);
+                if(value_ptr != NULL) {
+                    *value_ptr = tcb->ret_val;
+                }
+                node_destroy(dequeue(ctcb->join_queue, tcb));
+                tcb_destroy(tcb);
                 waiting = 0;
                 break;
             }
@@ -128,8 +130,8 @@ int mypthread_mutex_init(mypthread_mutex_t *mutex,
 	//initialize data structures for this mutex
 
 	// YOUR CODE HERE
-    mutex->flag = 0;
-    mutex->wait_q = queue_create();
+    (*mutex).flag = 0;
+    (*mutex).wait_q = queue_create();
 	return 0;
 }
 
@@ -141,8 +143,12 @@ int mypthread_mutex_lock(mypthread_mutex_t *mutex) {
     // context switch to the scheduler thread
 
     // YOUR CODE HERE
-    while(__atomic_test_and_set(mutex->flag, __ATOMIC_SEQ_CST)) {
-        enqueue(mutex->wait_q, ctcb);
+    int waiting = 0;
+    while(__atomic_test_and_set(&mutex->flag, __ATOMIC_SEQ_CST)) {
+        if(!waiting) {
+            enqueue(mutex->wait_q, ctcb);
+            waiting = 1;
+        }
         mypthread_yield();
     }
     return 0;
@@ -166,7 +172,7 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
     }
     wait_q->head = NULL;
     wait_q->rear = NULL;
-    __atomic_clear(mutex->flag, __ATOMIC_SEQ_CST);
+    __atomic_clear(&mutex->flag, __ATOMIC_SEQ_CST);
 	return 0;
 }
 
@@ -175,7 +181,6 @@ int mypthread_mutex_unlock(mypthread_mutex_t *mutex) {
 int mypthread_mutex_destroy(mypthread_mutex_t *mutex) {
 	// Deallocate dynamic memory created in mypthread_mutex_init
     queue_destroy(mutex->wait_q);
-    free(mutex);
 	return 0;
 }
 
@@ -282,6 +287,7 @@ void clean_global() {
         node = temp;
     }
     free(sched.all_tcbs);
+    sched.all_tcbs = NULL;
     /* Free rest of schedule */
     queue_destroy(sched.q);
     sched.q = NULL;
@@ -299,7 +305,7 @@ tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void
     tcb->join_th = join_th;
 
     getcontext(&tcb->ucp);
-    tcb->ucp.uc_stack.ss_sp = calloc(1, STACKSIZE);
+    tcb->ucp.uc_stack.ss_sp = malloc(STACKSIZE);
     tcb->ucp.uc_stack.ss_size = STACKSIZE;
     tcb->ucp.uc_flags = 0;
     makecontext(&tcb->ucp, (void (*)(void)) function, 2, arg);
@@ -313,7 +319,7 @@ tcb_ * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(void
 /* add tcb to queue */
 void enqueue(queue_ *queue, tcb_ *tcb) {
     node_ *node = node_create(tcb);
-    if(!queue->size) {
+    if(queue->size < 1) {
         queue->head = node;
         queue->rear = node;
     } else {
@@ -349,6 +355,12 @@ node_ * dequeue(queue_ *queue, tcb_ *tcb) {
         prev = node;
         node = node->next;
     }
+    if(node == NULL) {
+        return NULL;
+    }
+    prev->next = node->next;
+    queue->size--;
+    return node;
 }
 
 /* destroy thread control block */
@@ -383,6 +395,7 @@ void queue_destroy(queue_ *queue) {
 node_ * node_create(tcb_ *tcb) {
     node_ *node = malloc (sizeof(node_));
     node->tcb = tcb;
+    node->next = NULL;
     return node;
 }
 

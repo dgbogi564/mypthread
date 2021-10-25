@@ -55,7 +55,7 @@ typedef struct threadControlBlock {
 typedef struct mypthread_mutex_t {
 	/* add something here */
 	// YOUR CODE HERE
-    volatile unsigned char *flag;
+    volatile unsigned char flag;
     queue_ * wait_q;
 } mypthread_mutex_t;
 
