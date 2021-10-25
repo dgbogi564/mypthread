@@ -1,8 +1,8 @@
 // File:	mypthread.c
 
-// queue all group member's name:
-// username of iLab:
-// iLab Server:
+// queue all group member's name: David Gbogi, Shreyansh Prithyani
+// username of iLab: dog12, Svp78
+// iLab Server: ilab.cs.rutgers.edu
 
 #include "mypthread.h"
 
@@ -27,8 +27,6 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
     // allocate space of stack for this thread to run
     // after everything is all set, push this thread int
     // YOUR CODE HERE
-    schedule_ *sched_ptr = &sched;
-    tcb_ **ctcb_ptr = &ctcb;
     if(first_run) {
         schedule_init();
         ctcb = tcb_create(0, 0, NULL, NULL);
@@ -64,8 +62,6 @@ void mypthread_exit(void *value_ptr) {
 	// Deallocated any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
-    schedule_ *sched_ptr = &sched;
-    tcb_ **ctcb_ptr = &ctcb;
     ctcb->ret_val = value_ptr;
     node_ *node = sched.all_tcbs->head;
     while(node != NULL) {
@@ -91,8 +87,6 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
 	// de-allocate any dynamic memory created by the joining thread
 
 	// YOUR CODE HERE
-    schedule_ *sched_ptr = &sched;
-    tcb_ **ctcb_ptr = &ctcb;
     state_ *state = &ctcb->state;
     ctcb->state = BLOCKED;
     int waiting = 1;
@@ -218,8 +212,6 @@ static void sched_stcf() {
     // (feel free to modify arguments and return types)
 
     // YOUR CODE HERE
-    schedule_ *sched_ptr = &sched;
-    tcb_ **ctcb_ptr = &ctcb;
     ctcb->elapsed++;
     node_ *node = sched.q->head;
     while(node != NULL) {
@@ -278,7 +270,6 @@ void schedule_init() {
 /* clean schedule */
 void clean_global() {
     // Free schedule's tcb list (not freed in queue_destroy())
-    schedule_ *sched_ptr = &sched;
     node_ *node = sched.all_tcbs->head;
     while (node != NULL) {
         node_ *temp = node->next;

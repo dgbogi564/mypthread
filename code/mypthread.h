@@ -1,7 +1,7 @@
-// File:	mypthread_t.h
+// File:	mypthread.h
 
-// queue all group member's name: David Gbogi,
-// username of iLab: dog12,
+// queue all group member's name: David Gbogi, Shreyansh Prithyani
+// username of iLab: dog12, Svp78
 // iLab Server: ilab.cs.rutgers.edu
 
 #ifndef MYTHREAD_T_H
