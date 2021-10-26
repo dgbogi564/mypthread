@@ -20,6 +20,7 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <valgrind/valgrind.h>
 
 typedef uint mypthread_t;
 typedef struct queue queue_t;
@@ -34,6 +35,7 @@ typedef enum state {
 
 typedef struct schedule {
     unsigned int num_threads;               /* number of allocated threads */
+    int valgrind_id;                        /* stack id for valgrind use */
     ucontext_t ucp;                         /* scheduler's context */
     queue_t *run_q;                         /* thread run queue */
     queue_t *all_threads;                   /* list of all allocated threads */
@@ -44,6 +46,7 @@ typedef struct threadControlBlock {
     int elapsed;                            /* amount of time quanta the thread has elapsed */
     state_t state;                          /* thread state */
     mypthread_t th_id;                      /* thread id */
+    int valgrind_id;                        /* stack id for valgrind use */
     mypthread_t join_th;                    /* id of the parent thread */
     ucontext_t ucp;                         /* thread context */
     void *retval;                           /* return value */

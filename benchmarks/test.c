@@ -21,14 +21,14 @@ void test(void *arg) {
 int main(int argc, char **argv) {
 
     /* Implement HERE */
-    /*
+
     // test pthread create and join
     pthread_t th[0];
     pthread_create(&th[0], NULL, test, NULL);
     int *ret_val;
     pthread_join(th[0], &ret_val);
     printf("return value: %d", *ret_val);
-    free(ret_val);*/
+    free(ret_val);
 
     /*
     // test queue, nodes, and tcbs
@@ -49,11 +49,12 @@ int main(int argc, char **argv) {
     queue_destroy(q, 0);
     */
 
-
+    /*
     // test schedule struct
     pthread_t th[0];
     pthread_create(&th[0], NULL, test, NULL);
     schedule_destroy();
+     */
 
     return 0;
 }
