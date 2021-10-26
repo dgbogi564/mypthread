@@ -36,7 +36,9 @@ int schedule_create() {
     sched.all_threads = queue_create();
     // initialize context
     getcontext(&sched.ucp);
-    sched.ucp.uc_stack.ss_sp = malloc(STACKSIZE);
+    void *stack = malloc(STACKSIZE);
+    sched.ucp.uc_stack.ss_sp = stack;
+    sched.valgrind_id = VALGRIND_STACK_REGISTER(stack, stack+STACKSIZE);
     sched.ucp.uc_stack.ss_size = STACKSIZE;
     sched.ucp.uc_stack.ss_flags = 0;
     makecontext(&sched.ucp, schedule, 1);
@@ -51,6 +53,7 @@ void schedule_destroy() {
 #endif
     queue_destroy(sched.run_q, 0);
     queue_destroy(sched.all_threads, 1);
+    VALGRIND_STACK_DEREGISTER(sched.valgrind_id);
     free(sched.ucp.uc_stack.ss_sp);
     sched = (schedule_t){0};
     __atomic_clear(&sched_mtcb_initialized, __ATOMIC_SEQ_CST);
@@ -72,7 +75,9 @@ tcb_t * tcb_create(mypthread_t th_id, mypthread_t join_th, void *(*function)(voi
     tcb->join_q = queue_create();
     // make context
     getcontext(&tcb->ucp);
-    tcb->ucp.uc_stack.ss_sp = malloc(STACKSIZE);
+    void *stack = malloc(STACKSIZE);
+    tcb->ucp.uc_stack.ss_sp = stack;
+    tcb->valgrind_id = VALGRIND_STACK_REGISTER(stack, stack+STACKSIZE);
     tcb->ucp.uc_stack.ss_size = STACKSIZE;
     tcb->ucp.uc_stack.ss_flags = 0;
     makecontext(&tcb->ucp, (void (*)(void)) function, 2, arg);
@@ -88,6 +93,7 @@ void tcb_destroy(tcb_t *tcb) {
 #endif
     // checks to see if this is not the tcb of the main thread
     if(tcb->th_id) {
+        VALGRIND_STACK_DEREGISTER(tcb->valgrind_id);
         free(tcb->ucp.uc_stack.ss_sp);
     }
     queue_destroy(tcb->join_q, 0);
@@ -107,7 +113,6 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
     // queue and all threads list
     if(!__atomic_test_and_set(&sched_mtcb_initialized, __ATOMIC_SEQ_CST)) {
         schedule_create();
-        /*
         ctcb = malloc(sizeof(tcb_t));
         ctcb->elapsed = 0;
         ctcb->state = READY;
@@ -119,17 +124,15 @@ int mypthread_create(mypthread_t * thread, pthread_attr_t * attr,
         enqueue(sched.all_threads, ctcb);
         enqueue(sched.run_q, ctcb);
         sched.num_threads++;
-         */
     }
     // creates, initializes, enqueues the thread control block of
     // the new thread
-    // TODO tcb_t *tcb = tcb_create(*thread, ctcb->th_id, function, arg);
-    tcb_t *tcb = tcb_create(*thread, 1, function, arg); // TODO remove
+    tcb_t *tcb = tcb_create(*thread, ctcb->th_id, function, arg);
     enqueue(sched.all_threads, tcb);
     enqueue(sched.run_q, tcb);
     sched.num_threads++;
     // save current context and switch to the scheduler
-    //TODO swapcontext(&ctcb->ucp, &sched.ucp);
+    swapcontext(&ctcb->ucp, &sched.ucp);
     return 0;
 }
 
@@ -203,6 +206,7 @@ int mypthread_join(mypthread_t thread, void **value_ptr) {
                     *value_ptr = tcb->retval;
                 }
                 node_destroy(dequeue(ctcb->join_q, tcb));
+                tcb_destroy(tcb);
                 waiting = 0;
                 break;
             }
