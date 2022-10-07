@@ -1,9 +1,3 @@
-// File:	mypthread.c
-
-// List all group member's name:
-// username of iLab: dog12
-// iLab Server: ilab.cs.rutgers.edu
-
 #include "mypthread.h"
 
 #define STACKSIZE 4096                      /* size of stack */
