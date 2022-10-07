@@ -1,9 +1,3 @@
-// File:	mypthread_t.h
-
-// List all group member's name:
-// username of iLab: dog12
-// iLab Server: ilab.cs.rutgers.edu
-
 #ifndef MYTHREAD_T_H
 #define MYTHREAD_T_H
 
